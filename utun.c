@@ -1,6 +1,10 @@
+#include <unistd.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <pwd.h>
+
 #include <sys/ioctl.h>
 #include <sys/sys_domain.h>
 #include <sys/kern_control.h>
@@ -97,20 +101,45 @@ void setup(const char *addr, int mtu)
     close(fd);
 }
 
+void drop_root(const char *user)
+{
+    struct passwd *pw = getpwnam(user);
+    if (!pw) {
+        fatal("couldn't find %s", user);
+    }
+
+    if (setgroups(0, NULL) || setgid(pw->pw_gid) || setuid(pw->pw_uid)) {
+        fatal("couldn't change to %s uid=%u gid=%u", user, pw->pw_uid,
+              pw->pw_gid);
+    }
+
+    if (!setuid(0)) {
+        fatal("failed to drop root");
+    }
+}
+
 int main(int argc, char **argv)
 {
-    if (argc != 2) {
+    if (argc != 4) {
         fatal("invalid amount of arguments");
     }
-    char *addr = *(++argv);
 
     int fd = create();
     info("iface %s created", name);
 
+    char *addr = *(++argv);
     setup(addr, IFACE_MTU);
     info("address %s, mtu %d set", addr, IFACE_MTU);
 
-    getchar();
+    char *user = *(++argv);
+    drop_root(user);
 
-    return 0;
+    char fd_str[16];
+    snprintf(fd_str, sizeof(fd_str), "%d", fd);
+    char *path = *(++argv);
+    char *eargv[] = { path, fd_str, NULL };
+
+    info("exec %s", path);
+    (void)execv(path, eargv);
+    fatal("failed to exec: %s", strerror(errno));
 }
