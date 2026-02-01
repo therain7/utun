@@ -17,7 +17,7 @@
         fprintf(stderr, "%s:%d: %s: " fmt "\n", __FILE__, __LINE__, __func__, \
                 ##__VA_ARGS__);                                               \
         exit(EXIT_FAILURE);                                                   \
-    } while (0);
+    } while (0)
 
 #define IFACE_MTU 8500
 
@@ -47,7 +47,7 @@ int create(void)
         fatal("failed to connect: %d", r);
     }
 
-    uint8_t nblock = 1;
+    int nblock = 1;
     if ((r = ioctl(fd, FIONBIO, &nblock))) {
         fatal("failed to ioctl FIONBIO: %d", r);
     }
@@ -68,7 +68,7 @@ void setup(const char *addr, int mtu)
     }
 
     struct sockaddr_in iaddr = {
-        .sin_len = sizeof(addr),
+        .sin_len = sizeof(iaddr),
         .sin_family = AF_INET,
     };
     int r = inet_pton(AF_INET, addr, &iaddr.sin_addr);
@@ -77,7 +77,7 @@ void setup(const char *addr, int mtu)
     }
 
     struct sockaddr_in imask = {
-        .sin_len = sizeof(addr),
+        .sin_len = sizeof(iaddr),
         .sin_family = AF_INET,
         .sin_addr.s_addr = htonl((uint32_t)-1) // 32,
     };
