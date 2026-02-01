@@ -5,6 +5,7 @@
 #include <sys/sys_domain.h>
 #include <sys/kern_control.h>
 #include <net/if_utun.h>
+#include <arpa/inet.h>
 
 #define info(fmt, ...) printf(fmt "\n", ##__VA_ARGS__)
 #define fatal(fmt, ...)                                                       \
@@ -13,6 +14,8 @@
                 ##__VA_ARGS__);                                               \
         exit(EXIT_FAILURE);                                                   \
     } while (0);
+
+#define IFACE_MTU 8500
 
 static char name[IFNAMSIZ];
 
@@ -53,10 +56,60 @@ int create(void)
     return fd;
 }
 
-int main(void)
+void setup(const char *addr, int mtu)
 {
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        fatal("failed to get fd");
+    }
+
+    struct sockaddr_in iaddr = {
+        .sin_len = sizeof(addr),
+        .sin_family = AF_INET,
+    };
+    int r = inet_pton(AF_INET, addr, &iaddr.sin_addr);
+    if (!r) {
+        fatal("invalid address: %s", addr);
+    }
+
+    struct sockaddr_in imask = {
+        .sin_len = sizeof(addr),
+        .sin_family = AF_INET,
+        .sin_addr.s_addr = htonl((uint32_t)-1) // 32,
+    };
+
+    struct ifaliasreq ifra = { 0 };
+    strlcpy(ifra.ifra_name, name, sizeof(ifra.ifra_name));
+    memcpy(&ifra.ifra_addr, &iaddr, sizeof(iaddr));
+    memcpy(&ifra.ifra_broadaddr, &iaddr, sizeof(iaddr));
+    memcpy(&ifra.ifra_mask, &imask, sizeof(imask));
+
+    if ((r = ioctl(fd, SIOCAIFADDR, &ifra))) {
+        fatal("failed to set address");
+    }
+
+    struct ifreq ifr = { .ifr_mtu = mtu };
+    strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+    if ((r = ioctl(fd, SIOCSIFMTU, &ifr))) {
+        fatal("failed to set mtu");
+    }
+
+    close(fd);
+}
+
+int main(int argc, char **argv)
+{
+    if (argc != 2) {
+        fatal("invalid amount of arguments");
+    }
+    char *addr = *(++argv);
+
     int fd = create();
-    info("created iface %s", name);
+    info("iface %s created", name);
+
+    setup(addr, IFACE_MTU);
+    info("address %s, mtu %d set", addr, IFACE_MTU);
+
     getchar();
 
     return 0;
